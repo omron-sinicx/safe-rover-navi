@@ -108,15 +108,3 @@ class DataSet(data.Dataset):
         :param data: input data to be converted
         """
         return data.transpose(1, 2, 0)
-
-def main():
-    n_data = 1
-    dirname = os.path.join(BASE_PATH, '../../datasets/data%02d/' % (n_data))
-    split = "train"
-    dataset = DataSet(dirname, split)
-    color_map, mask = dataset[0] # randomly pick image and mask pair
-    visualize(vmin=0, vmax=9, image=dataset.to_image(color_map), mask=create_int_label(dataset.to_image(mask)))
-    plt.show()
-
-if __name__ == '__main__':
-    main()

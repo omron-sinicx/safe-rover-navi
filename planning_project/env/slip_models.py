@@ -243,13 +243,3 @@ class SlipModelsGenerator:
         ax2.set_yticks([-1, -0.5, 0, 0.5, 1])
         ax2.set_xlabel('slope angle deg')
         ax2.set_ylabel('slip ratio')
-
-def main():
-    idx_ds = 3
-    dirname = os.path.join(BASE_PATH, '../../datasets/data%02d/' % (idx_ds))
-    smg = SlipModelsGenerator(dirname, n_terrains=8, is_update=True, type_noise="diverse")
-    smg.visualize()
-    plt.show()
-
-if __name__ == '__main__':
-    main()
