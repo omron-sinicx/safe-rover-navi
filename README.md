@@ -31,15 +31,17 @@ $ source .venv/bin/activate
 - Go to `./notebooks/demo.ipynb` to see example demonstration of traversability prediction and path planning.
 
 ### Reproduce experimental results
-- TBD
+- Execute the following command to reproduce experimental results against various datasets.
 
 ```
 (.venv) $ python scripts/eval.py
 ```
+Note that you need to specify the name of datasets, such as `Std`, `ES`, or `AA`.
 
 ### Train ML models using datasets
-- TBD
+- Execute the following command to train terrain classifiers after you download or produce datasets.
 
 ```
 (.venv) $ python scripts/train.py
 ```
+Note that you need to specify the name of datasets, such as `Std`, `ES`, or `AA`. The models for `Std` and `ES` datasets should be identical since their only difference is difficulty of predicting latent slip functions.
