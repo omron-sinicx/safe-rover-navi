@@ -3,7 +3,6 @@ description: evaluation script for learning-based path planning algorithm
 author: Masafumi Endo
 """
 
-import dataclasses
 import pickle
 import time
 import sys, os
@@ -18,76 +17,9 @@ from planning_project.env.slip_models import SlipModel, SlipModelsGenerator
 from planning_project.env.utils import SlipDistributionMap
 from planning_project.planner.planner import AStarPlanner, Node
 from planning_project.utils.data import DataSet, create_int_label
+from planning_project.utils.structs import HyperParams, PlanMetrics, AbsEval
 
 PATH_COLOR = ['k', 'g', 'b', 'c']
-
-@dataclasses.dataclass
-class PlanMetrics:
-    """
-    structure containing types of planning algorithms
-
-    :param is_plan: whether the planner do planning or not
-    :param type_model: slip model name
-    :param type_embed: uncertainty embed method
-    :param alpha: alpha value controls var/cvar behavior
-    """
-    is_plan: bool 
-    type_model: str
-    type_embed: str
-    alpha: float = None
-
-@dataclasses.dataclass
-class AbsEval:
-    """
-    structure containing evaluated metrics
-
-    """
-    plan_metrics: any
-    results: any
-    is_solved: float = None
-    is_feasible: float = None
-    # mean and var
-    dist: np.array = None
-    est_cost: np.array = None
-    obs_time: np.array = None
-    max_slip: np.array = None
-
-@dataclasses.dataclass
-class HyperParams:
-    """
-    structure containing hyper parameters
-
-    :param nn_model_dir: directory to neural network model
-    :param data_dir: directory to slip model
-    :param results_dir: directory to save results
-
-    :param n_terrains: number of terrain types
-    :param res: resolution of map environment
-    
-    :param start_pos: start position for path planning
-    :param goal_pos: goal position for path planning 
-
-    :param plan_metrics: parameter for specifying planning metrics
-    :param is_plan: operator for planning or not
-
-    :param idx_dataset: dataset index
-    :param idx_instances: instance index
-    """
-    # param for directory
-    nn_model_dir: str
-    data_dir: str
-    results_dir: str
-    # param for map
-    n_terrains: int
-    res: float
-    # param for planning
-    start_pos: tuple
-    goal_pos: tuple
-    # param for learning-based planner 
-    plan_metrics: list
-    # param for experiment
-    idx_dataset: int
-    idx_instances: list
 
 class Runner:
 
@@ -104,7 +36,6 @@ class Runner:
         self.planner = None
 
         self.metrics_ds = []
-        self.results_dir = os.path.join(self.hyper_params.results_dir, 'data%02d/' % (self.hyper_params.idx_dataset))
 
         self.run_load_experiments()
 
@@ -171,9 +102,9 @@ class Runner:
         run_experiments_for_dataset: run experiment for given dataset
 
         """
-        self.dataset = DataSet(os.path.join(self.hyper_params.data_dir, 'data%02d/' % (self.hyper_params.idx_dataset)), "test")
-        self.smg = SlipModelsGenerator(os.path.join(self.hyper_params.data_dir, 'data%02d/' % (self.hyper_params.idx_dataset)), self.hyper_params.n_terrains)
-        self.planner = AStarPlanner(map=None, smg=self.smg, hyper_params=self.hyper_params)
+        self.dataset = DataSet(self.hyper_params.data_dir, "test")
+        self.smg = SlipModelsGenerator(self.hyper_params.data_dir, self.hyper_params.n_terrains)
+        self.planner = AStarPlanner(map=None, smg=self.smg, nn_model_dir=self.hyper_params.nn_model_dir)
         idx_instances = self.hyper_params.idx_instances
         if not idx_instances:
             idx_instances = list(range(len(self.dataset)))
@@ -182,18 +113,29 @@ class Runner:
             grid_map = self.set_test_env(idx_instance)
             grid_maps.append(grid_map)
         for plan_metrics in self.hyper_params.plan_metrics:
-            metrics_env = self.run_expriments_for_metrics(grid_maps, plan_metrics)
+            # make directory to store results if not
+            if plan_metrics.type_embed == 'mean':
+                results_dir = os.path.join(self.hyper_params.results_dir, '%s_%s/' 
+                                            % (plan_metrics.type_model, plan_metrics.type_embed))
+            else:
+                results_dir = os.path.join(self.hyper_params.results_dir, '%s_%s_%s/' 
+                                            % (plan_metrics.type_model, plan_metrics.type_embed, str(int(plan_metrics.alpha * 100))))
+            if not os.path.exists(results_dir):
+                os.makedirs(os.path.join(results_dir, 'figs/'), exist_ok=True)
+                os.makedirs(os.path.join(results_dir, 'metrics/'), exist_ok=True)
+                os.makedirs(os.path.join(results_dir, 'solutions/'), exist_ok=True)
+            metrics_env = self.run_expriments_for_metrics(grid_maps, plan_metrics, results_dir)
             self.metrics_ds.append(metrics_env)
         return self.metrics_ds
 
-    def run_expriments_for_metrics(self, grid_maps, plan_metrics):
+    def run_expriments_for_metrics(self, grid_maps, plan_metrics, results_dir):
         """
         run_experiments_for_metrics: run experiments for datasets with given metrics
 
         :param idx_instance: index instances
         :param plan_metrics: specified metrics for planning
         """
-        metrics_envs = Parallel(n_jobs=1)(delayed(self.run_experiment_for_env)(grid_map, plan_metrics) for grid_map in grid_maps)
+        metrics_envs = Parallel(n_jobs=1)(delayed(self.run_experiment_for_env)(grid_map, plan_metrics, results_dir) for grid_map in grid_maps)
         return metrics_envs
 
     def load_experiments(self):
@@ -201,49 +143,41 @@ class Runner:
         load_experiments: load experiments' results
 
         """
-        self.dataset = DataSet(os.path.join(self.hyper_params.data_dir, 'data%02d/' % (self.hyper_params.idx_dataset)), "test")
+        self.dataset = DataSet(self.hyper_params.data_dir, "test")
         idx_instances = self.hyper_params.idx_instances
         if not idx_instances:
             idx_instances = list(range(len(self.dataset)))
         for plan_metrics in self.hyper_params.plan_metrics:
+            if plan_metrics.type_embed == 'mean':
+                results_dir = os.path.join(self.hyper_params.results_dir, '%s_%s/' 
+                                           % (plan_metrics.type_model, plan_metrics.type_embed))
+            else:
+                results_dir = os.path.join(self.hyper_params.results_dir, '%s_%s_%s/' 
+                                           % (plan_metrics.type_model, plan_metrics.type_embed, str(int(plan_metrics.alpha * 100))))
             metrics_env = []
             for idx_instance in idx_instances:
                 name_instance = os.path.splitext(self.dataset.ids[idx_instance])[0] 
                 print("load experiment for instance ", name_instance)
-                if plan_metrics.type_model == "gmm" and plan_metrics.type_embed == "cvar":
-                    with open(os.path.join(self.results_dir, 'metrics/%s_%s_%s/%s.pkl' % (plan_metrics.type_model, plan_metrics.type_embed, str(int(plan_metrics.alpha * 100)), name_instance)), mode='rb') as f:
-                        metrics = pickle.load(f)
-                else:
-                    with open(os.path.join(self.results_dir, 'metrics/%s_%s/%s.pkl' % (plan_metrics.type_model, plan_metrics.type_embed, name_instance)), mode='rb') as f:
-                        metrics = pickle.load(f)
+                with open(os.path.join(results_dir, 'metrics/%s.pkl' % (name_instance)), mode='rb') as f:
+                    metrics = pickle.load(f)
                 metrics_env.append(metrics)
             self.metrics_ds.append(metrics_env)
         return self.metrics_ds
 
-    def run_experiment_for_env(self, grid_map, plan_metrics):
+    def run_experiment_for_env(self, grid_map, plan_metrics, results_dir):
         """
         run_experiment_for_env: run experiment for given map environment by specific planning algorithm
 
         :param idx_instance: index of environment instance
         """
         print('start to run experiment for the conditions of : %s %s %s' %(plan_metrics.type_model, plan_metrics.type_embed, grid_map.data.name_instance))
-        metrics = self.execute_planner(grid_map, grid_map.data.name_instance, plan_metrics)
-        if plan_metrics.type_model == "gmm" and plan_metrics.type_embed == "cvar":
-            with open(os.path.join(self.results_dir, 'metrics/%s_%s_%s/%s.pkl' % (plan_metrics.type_model, plan_metrics.type_embed, str(int(plan_metrics.alpha * 100)), grid_map.data.name_instance)), mode='wb') as f:
-                pickle.dump(metrics, f)
-        else:
-            with open(os.path.join(self.results_dir, 'metrics/%s_%s/%s.pkl' % (plan_metrics.type_model, plan_metrics.type_embed, grid_map.data.name_instance)), mode='wb') as f:
-                pickle.dump(metrics, f)
+        metrics = self.execute_planner(grid_map, grid_map.data.name_instance, plan_metrics, results_dir)
+        # save metrics and figures
+        with open(os.path.join(results_dir, 'metrics/%s.pkl' % (grid_map.data.name_instance)), mode='wb') as f:
+            pickle.dump(metrics, f)
         # show and save figure
         fig = self.visualize(planning_results=metrics)
-        if plan_metrics.type_model == "gmm" and plan_metrics.type_embed == "cvar":
-            fig.savefig(os.path.join(self.results_dir, 'figs/%s_%s_%s/img/%s.png' % (plan_metrics.type_model, plan_metrics.type_embed, str(int(plan_metrics.alpha * 100)), grid_map.data.name_instance)))
-            with open(os.path.join(self.results_dir, 'figs/%s_%s_%s/obj/%s.pkl' % (plan_metrics.type_model, plan_metrics.type_embed, str(int(plan_metrics.alpha * 100)), grid_map.data.name_instance)), mode='wb') as f:
-                pickle.dump(fig, f)
-        else:
-            fig.savefig(os.path.join(self.results_dir, 'figs/%s_%s/img/%s.png' % (plan_metrics.type_model, plan_metrics.type_embed, grid_map.data.name_instance)))
-            with open(os.path.join(self.results_dir, 'figs/%s_%s/obj/%s.pkl' % (plan_metrics.type_model, plan_metrics.type_embed, grid_map.data.name_instance)), mode='wb') as f:
-                pickle.dump(fig, f)
+        fig.savefig(os.path.join(results_dir, 'figs/%s.png' % (grid_map.data.name_instance)))
         plt.close()
         return metrics
 
@@ -267,7 +201,7 @@ class Runner:
         grid_map.data.name_instance = name_instance
         return grid_map
 
-    def execute_planner(self, grid_map, name_instance: str, plan_metrics):
+    def execute_planner(self, grid_map, name_instance: str, plan_metrics, results_dir):
         """
         execute_planner: execute assigned path planning algorithm
 
@@ -279,8 +213,6 @@ class Runner:
                         self.hyper_params.start_pos, 
                         self.hyper_params.goal_pos,
                         plan_metrics)
-        if plan_metrics.type_model != "gtm":
-            _ = self.planner.predict(self.dataset.to_tensor(grid_map.data.color))
         if plan_metrics.is_plan:
             print("start path planning!")
             start = time.time()
@@ -288,25 +220,13 @@ class Runner:
             run_time = time.time() - start
             print("done path planning! running time...", run_time)
             # save solution
-            if plan_metrics.type_model == "gmm" and plan_metrics.type_embed == "cvar":
-                with open(os.path.join(self.results_dir, 'solutions/%s_%s_%s/%s.pkl' % 
-                (plan_metrics.type_model, plan_metrics.type_embed, str(int(plan_metrics.alpha * 100)), name_instance)), mode='wb') as f:
-                    pickle.dump(nodes, f)
-            else:
-                with open(os.path.join(self.results_dir, 'solutions/%s_%s/%s.pkl' % 
-                (plan_metrics.type_model, plan_metrics.type_embed, name_instance)), mode='wb') as f:
-                    pickle.dump(nodes, f)
+            with open(os.path.join(results_dir, 'solutions/%s.pkl' % (name_instance)), mode='wb') as f:
+                pickle.dump(nodes, f)
         else:
             # load solution
             print(plan_metrics.type_model, plan_metrics.type_embed)
-            if plan_metrics.type_model == "gmm" and plan_metrics.type_embed == "cvar":
-                with open(os.path.join(self.results_dir, 'solutions/%s_%s_%s/%s.pkl' % 
-                (plan_metrics.type_model, plan_metrics.type_embed, str(int(plan_metrics.alpha * 100)), name_instance)), mode='rb') as f:
-                    nodes = pickle.load(f)
-            else:
-                with open(os.path.join(self.results_dir, 'solutions/%s_%s/%s.pkl' % 
-                (plan_metrics.type_model, plan_metrics.type_embed, name_instance)), mode='rb') as f:
-                    nodes = pickle.load(f)
+            with open(os.path.join(results_dir, 'solutions/%s.pkl' % (name_instance)), mode='rb') as f:
+                nodes = pickle.load(f)
             self.planner.set_final_path(nodes)
         metrics = self.planner.execute_final_path()
         if plan_metrics.type_model == "gtm":
@@ -360,12 +280,12 @@ def show_eval(runner, is_abs: bool):
             print("max. slip : ", abs_eval.max_slip)
             print(" ")
 
-def run_experiments_for_metrics(idx_dataset: int, n_terrains: int, idx_instances: list, plan_metrics, is_run: bool):
+def run_experiments_for_metrics(n_ds: str, n_terrains: int, idx_instances: list, plan_metrics, is_run: bool):
     # set hyper-params
     # param for directory
-    nn_model_dir = os.path.join(BASE_PATH, '../trained_models/models/data%02d/best_model.pth' % (idx_dataset))
-    data_dir = os.path.join(BASE_PATH, '../datasets/')
-    results_dir = os.path.join(BASE_PATH, '../results/')
+    nn_model_dir = os.path.join(BASE_PATH, '../trained_models/models/dataset_%s/best_model.pth' % (n_ds))
+    data_dir = os.path.join(BASE_PATH, '../datasets/dataset_%s/' % (n_ds))
+    results_dir = os.path.join(BASE_PATH, '../results/dataset_%s/' % (n_ds)) 
     # param for map
     res = 1
     # param for planning
@@ -380,27 +300,29 @@ def run_experiments_for_metrics(idx_dataset: int, n_terrains: int, idx_instances
                             start_pos=start_pos,
                             goal_pos=goal_pos,
                             plan_metrics=plan_metrics,
-                            idx_dataset=idx_dataset,
+                            n_ds=n_ds,
                             idx_instances=idx_instances)
     runner = Runner(hyper_params, is_run=is_run)
     show_eval(runner=runner, is_abs=True)
 
 def main():
-    idx_dataset = 2
-    n_terrains = 10
-    idx_instances = list(range(1))
+    n_ds = 'Std'
+    if n_ds == 'Std' or n_ds == 'ES':
+        n_terrains = 10
+    elif n_ds == 'AA':
+        n_terrains = 8
+    idx_instances = [0] # provide [] when you want to reproduce results
     is_run = True
     is_plan = True
     plan_metrics = [
-                    PlanMetrics(is_plan=is_plan, type_model="gtm", type_embed="mean", alpha=None),
                     PlanMetrics(is_plan=is_plan, type_model="gsm", type_embed="mean", alpha=None),
                     PlanMetrics(is_plan=is_plan, type_model="gsm", type_embed="var", alpha=0.99),
                     PlanMetrics(is_plan=is_plan, type_model="gsm", type_embed="cvar", alpha=0.99),
                     PlanMetrics(is_plan=is_plan, type_model="gmm", type_embed="mean", alpha=None),
                     PlanMetrics(is_plan=is_plan, type_model="gmm", type_embed="var", alpha=0.99),
                     PlanMetrics(is_plan=is_plan, type_model="gmm", type_embed="cvar", alpha=0.99),
-                    ] # proposed method
-    run_experiments_for_metrics(idx_dataset, n_terrains, idx_instances, plan_metrics, is_run)
+                    ] # run planning and execution with proposed method and other comparison methods
+    run_experiments_for_metrics(n_ds, n_terrains, idx_instances, plan_metrics, is_run)
 
 if __name__ == '__main__':
     main()
