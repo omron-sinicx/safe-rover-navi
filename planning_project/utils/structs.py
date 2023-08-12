@@ -55,7 +55,7 @@ class HyperParams:
     :param plan_metrics: parameter for specifying planning metrics
     :param is_plan: operator for planning or not
 
-    :param idx_dataset: dataset index
+    :param n_ds: dataset name
     :param idx_instances: instance index
     """
     # param for directory
@@ -71,7 +71,7 @@ class HyperParams:
     # param for learning-based planner 
     plan_metrics: list
     # param for experiment
-    idx_dataset: int
+    n_ds: int
     idx_instances: list
 
 @dataclasses.dataclass
