@@ -117,9 +117,9 @@ class EvalMetrics:
     time_slips: np.array = None
 
 @dataclasses.dataclass
-class HyperParams:
+class TrainParams:
     """
-    structure containing hyper parameters
+    structure containing hyper parameters for training
 
     :param data_dir: directory to dataset
     :param nn_model_dir: direcotry to neural network model

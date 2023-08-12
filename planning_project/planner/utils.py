@@ -3,38 +3,7 @@ description: a collection of utility functions specific to planner
 author: Masafumi Endo
 """
 
-import math
 import numpy as np
-from scipy.stats import norm
-import dataclasses
-
-from planning_project.planner.motion_model import motion_model
-
-@dataclasses.dataclass
-class Metrics:
-    """
-    structure containing path planning metrics
-
-    :param path: final path derived by planner
-    :param dist: total distance when path execution
-    :param time: total time when path execution
-    :param est_cost: esimtated risk-associated time when path planning
-    :param obs_cost: observed risk-associated time when path execution
-    :param max_slip: max. slip ratio when path execution
-    :param is_solved: check the problem is solved or not
-    :param is_feasible: feasibility check for path execution
-    :param node_failed: failed node (positional info. in node class)
-    """
-    path: np.array = None
-    dist: float = None
-    obs_time: float = None
-    est_cost: float = None
-    max_slip: float = None
-    is_solved: bool = True
-    is_feasible: bool = True
-    node_failed: any = None
-    total_traj: np.array = None
-    time_slips: np.array = None
 
 class BaseRiskMetrics:
 
