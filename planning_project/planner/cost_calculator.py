@@ -5,7 +5,6 @@ author: Masafumi Endo
 
 import math
 import numpy as np
-from scipy.stats import norm
 
 from planning_project.planner.utils import BaseRiskMetrics, GMMRiskMetrics
 from planning_project.planner.motion_model import motion_model
