@@ -6,7 +6,6 @@ author: Masafumi Endo
 import random
 import numpy as np
 import matplotlib.pyplot as plt
-import matplotlib.colors
 import sys, os
 
 BASE_PATH = os.path.dirname(__file__)
@@ -14,15 +13,15 @@ sys.path.append(os.path.join(BASE_PATH, '../planning_project'))
 
 from planning_project.env.env import GridMap
 from planning_project.env.slip_models import SlipModel, SlipModelsGenerator
-from planning_project.utils.data import visualize
+from planning_project.utils.viz import viz_terrain_props
 
 class DataGenerator:
 
-    def __init__(self, n_data: int, split: str, n: int, n_envs: int = 10, n_terrains: int = 10, n_colors: int = 5, n_instances: int = 100, is_show: bool = False, is_random: bool = False):
+    def __init__(self, n_ds: str, split: str, n: int, n_envs: int = 10, n_terrains: int = 10, n_colors: int = 5, n_instances: int = 100, is_show: bool = False, is_random: bool = False):
         """
         __init__: 
 
-        :param n_data: number of datasets
+        :param n_data: name of datasets, as [Std, ES, AA]
         :param split: data split (train, valid, or test)
         :param n: # of grid in one axis
         :param n_envs: number of environment types that have different occupancy vector
@@ -32,7 +31,7 @@ class DataGenerator:
         :param is_show: show generated terrain map or not
         :param is_random: set randomness (True: no reproductivity, False: reproductivity)
         """
-        self.n_data = n_data
+        self.n_ds = n_ds
         self.split = split
         self.n = n
         self.n_terrains = n_terrains
@@ -42,7 +41,12 @@ class DataGenerator:
         self.is_show = is_show
         self.is_random = is_random
 
-        self.smg = SlipModelsGenerator(os.path.join(BASE_PATH, '../datasets/data%02d/' % (self.n_data)), self.n_terrains)
+        self.dict_ds = {"Std": 1, "ES": 2, "AA": 3}
+        # make directory if not
+        path2ds = os.path.join(BASE_PATH, '../datasets/dataset_%s/%s/' % (self.n_ds, self.split))
+        if not os.path.exists(path2ds):
+            os.makedirs(path2ds, exist_ok=True)
+        self.smg = SlipModelsGenerator(os.path.join(BASE_PATH, '../datasets/dataset_%s/' % (self.n_ds)), self.n_terrains)
 
         # set conditions for occupancy ratio
         self.n_filled = 4
@@ -90,13 +94,13 @@ class DataGenerator:
                 label_one_hot = np.reshape(self.create_one_hot_label(grid_map.data.t_class), (grid_map.n, grid_map.n, self.n_terrains))
                 print("map generation done for #", j+1, " instances, seed: ", seed_instances)
                 if self.is_show:
-                    visualize(vmin=0, vmax=9, n_row=1, n_col=2, fig=plt.figure(),
+                    viz_terrain_props(vmin=0, vmax=9, n_row=1, n_col=2, fig=plt.figure(),
                             terrain_color=grid_map.data.color,
                             mask=np.reshape(grid_map.data.t_class, (grid_map.n, grid_map.n)))
                     plt.show()
-                np.save(os.path.join(BASE_PATH, '../datasets/data%02d/%s/env_%02d_%04d' % (self.n_data, self.split, i, j)), {'input': color_map, 'label': label_one_hot, 'height': height_map})
+                np.save(os.path.join(BASE_PATH, '../datasets/dataset_%s/%s/env_%02d_%04d' % (self.n_ds, self.split, i, j)), {'input': color_map, 'label': label_one_hot, 'height': height_map})
         seed_info = {'seed_envs': seed_envs, 'seed_instances': seed_instances}
-        np.save(os.path.join(BASE_PATH, '../datasets/data%02d/%s/seed_info' % (self.n_data, self.split)), seed_info)
+        np.save(os.path.join(BASE_PATH, '../datasets/dataset_%s/%s/seed_info' % (self.n_ds, self.split)), seed_info)
 
     def set_seed_info(self):
         """
@@ -104,19 +108,21 @@ class DataGenerator:
 
         """
         if self.split == "train":
-            if self.n_data == 1:
+            if self.n_ds == "Std" or self.n_ds == "ES":
                 seed_envs = 0
                 seed_instances = 0
             else:
-                seed_info = np.load(os.path.join(BASE_PATH, '../datasets/data%02d/test/seed_info.npy' % (self.n_data - 1)), allow_pickle=True).item()
+                if self.n_ds == "AA":
+                    n_ds_p = "ES"
+                seed_info = np.load(os.path.join(BASE_PATH, '../datasets/dataset_%s/test/seed_info.npy' % (n_ds_p)), allow_pickle=True).item()
                 seed_envs = seed_info["seed_envs"]
                 seed_instances = seed_info["seed_instances"]
         elif self.split == "valid":
-            seed_info = np.load(os.path.join(BASE_PATH, '../datasets/data%02d/train/seed_info.npy' % (self.n_data)), allow_pickle=True).item()
+            seed_info = np.load(os.path.join(BASE_PATH, '../datasets/dataset_%s/train/seed_info.npy' % (self.n_ds)), allow_pickle=True).item()
             seed_envs = seed_info["seed_envs"]
             seed_instances = seed_info["seed_instances"]
         elif self.split == "test":
-            seed_info = np.load(os.path.join(BASE_PATH, '../datasets/data%02d/valid/seed_info.npy' % (self.n_data)), allow_pickle=True).item()
+            seed_info = np.load(os.path.join(BASE_PATH, '../datasets/dataset_%s/valid/seed_info.npy' % (self.n_ds)), allow_pickle=True).item()
             seed_envs = seed_info["seed_envs"]
             seed_instances = seed_info["seed_instances"]
         print("set seed information! for environments: ", seed_envs, ", for instances: ", seed_instances)
@@ -128,7 +134,7 @@ class DataGenerator:
 
         """
         # get latent slip model gain
-        random.seed(self.n_data)
+        random.seed(self.dict_ds[self.n_ds])
         gains = [slip_model.gain for slip_model in self.smg.slip_models]
         gains_sorted = sorted(gains)
         gains_l = random.sample(gains_sorted[:self.n_colors], self.n_colors)
@@ -186,17 +192,24 @@ class DataGenerator:
         label_one_hot = np.eye(self.n_terrains)[data.astype(int)]
         return label_one_hot
 
-def create_datasets(n_data: int):
-    data_generator_train = DataGenerator(n_data=n_data, split="train", n=96, n_envs=10, n_terrains=8, n_colors=4, n_instances=100, is_show=False, is_random=False)
-    data_generator_valid = DataGenerator(n_data=n_data, split="valid", n=96, n_envs=10, n_terrains=8, n_colors=4, n_instances=50, is_show=False, is_random=False)
-    data_generator_test = DataGenerator(n_data=n_data, split="test", n=96, n_envs=10, n_terrains=8, n_colors=4, n_instances=10, is_show=False, is_random=False)
+def create_datasets(n_ds: str):
+    # set terrain classes and corresponding color info.
+    if n_ds == "Std" or n_ds == "ES":
+        n_terrains = 10
+        n_colors = 10
+    elif n_ds == "AA":
+        n_terrains = 8
+        n_colors = 4
+    data_generator_train = DataGenerator(n_ds=n_ds, split="train", n=96, n_envs=10, n_terrains=n_terrains, n_colors=n_colors, n_instances=100, is_show=False, is_random=False)
+    data_generator_valid = DataGenerator(n_ds=n_ds, split="valid", n=96, n_envs=10, n_terrains=n_terrains, n_colors=n_colors, n_instances=50, is_show=False, is_random=False)
+    data_generator_test = DataGenerator(n_ds=n_ds, split="test", n=96, n_envs=10, n_terrains=n_terrains, n_colors=n_colors, n_instances=10, is_show=False, is_random=False)
     data_generator_train.create_data()
     data_generator_valid.create_data()
     data_generator_test.create_data()
 
 def main():
-    n_data = 3
-    create_datasets(n_data=n_data)
+    n_ds = "Std"
+    create_datasets(n_ds=n_ds)
 
 if __name__ == '__main__':
     main()
