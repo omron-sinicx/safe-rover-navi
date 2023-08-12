@@ -3,33 +3,17 @@ description: a library to generate planetary surface terrain.
 author: Masafumi Endo
 """
 
-import dataclasses
 from cmath import sqrt
 import random
 import warnings
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.colors
-import seaborn as sns
 
 from scipy import fftpack
 import opensimplex as simplex
 
-@dataclasses.dataclass
-class Data:
-    """
-    structure containing map-dependent data
-
-    :param height: terrain height info.
-    :param t_class: terrain class info.
-    :param color: terrain color info.
-    :param slip: slip observation info. (this should be used for path execution)
-    """
-    height: np.array = None
-    t_class: np.array = None
-    color: np.array = None
-    slip: np.array = None
-    name_instance: str = None
+from planning_project.utils.structs import Data
 
 class GridMap:
 
@@ -463,93 +447,3 @@ class GridMap:
         print("range: ", self.n * self.res, " [m]")
         print("resolution: ", self.res, " [m]")
         print("# of data: ", self.num_grid)
-
-    def plot_maps(self, figsize: tuple = (10, 4), is_tf: bool = True):
-        """
-        plot_maps: plot 2D and 2.5D figures with given size
-
-        :param figsize: size of figure
-        :param is_tf: existence of terrain features
-        """
-        sns.set()
-        sns.set_style('whitegrid')
-        fig = plt.figure(figsize=figsize)
-        _, ax_3d = self.plot_3d_map(fig=fig, rc=121, is_tf=is_tf)
-        _, ax_2d = self.plot_2d_map(fig=fig, rc=122)
-        plt.tight_layout()
-        return ax_2d, ax_3d
-
-    def plot_2d_map(self, grid_data: np.ndarray = None, fig: plt.figure = None, rc: int = 111, field_name: str = "height", 
-                    title: str = "2D celestial terrain", cmap: str = "jet", label: str = "height m"):
-        """
-        plot_2d_map: plot 2D grid map
-
-        :param grid_data: data to visualize
-        :param fig: figure
-        :param rc: position specification as rows and columns
-        :param i_tf: index of terrain features
-        :param title: title of shown figure
-        """
-        xx, yy = np.meshgrid(np.arange(0.0, self.n * self.res, self.res),
-                             np.arange(0.0, self.n * self.res, self.res))
-
-        if grid_data is None:
-            grid_data = np.reshape(getattr(self.data, field_name), (self.n, self.n))
-            data = getattr(self.data, field_name)
-        else:
-            data = np.reshape(grid_data, -1)
-        if not fig:
-            fig = plt.figure()
-
-        ax = fig.add_subplot(rc)
-        hmap = ax.pcolormesh(xx + self.res / 2.0, yy + self.res / 2.0, grid_data,
-                             cmap=cmap, vmin=min(data), vmax=max(data))
-        ax.set_xlabel("x-axis m")
-        ax.set_ylabel("y-axis m")
-        ax.set_aspect("equal")
-        ax.set_xlim(xx.min(), xx.max() + self.res)
-        ax.set_ylim(yy.min(), yy.max() + self.res)
-        ax.set_title(title)
-
-        plt.colorbar(hmap, ax=ax, label=label, orientation='horizontal')
-
-        return hmap, ax
-
-    def plot_3d_map(self, grid_data: np.ndarray = None, fig: plt.figure = None, rc: int = 111, is_tf: bool = False):
-        """
-        plot_3d_map: plot 2.5D grid map
-
-        :param grid_data: data to visualize
-        :param fig: figure
-        :param rc: position specification as rows and columns
-        :param is_tf: existence of terrain features
-        """
-        xx, yy = np.meshgrid(np.arange(0.0, self.n * self.res, self.res),
-                             np.arange(0.0, self.n * self.res, self.res))
-
-        if grid_data is None:
-            grid_data = np.reshape(self.data.height, (self.n, self.n))
-            data = self.data.height
-        else:
-            data = np.reshape(grid_data, -1)
-        if not fig:
-            fig = plt.figure()
-
-        ax = fig.add_subplot(rc, projection="3d")
-        if not is_tf:
-            hmap = ax.plot_surface(xx + self.res / 2.0, yy + self.res / 2.0, grid_data,
-                                cmap="jet", vmin=min(data), vmax=max(data), linewidth=0, antialiased=False)
-        else:
-            hmap = ax.plot_surface(xx + self.res / 2.0, yy + self.res / 2.0, grid_data, 
-                                facecolors=self.data.color, linewidth=0, antialiased=False)
-        ax.set_xlabel("x-axis m")
-        ax.set_ylabel("y-axis m")
-        ax.set_zticks(np.arange(xx.min(), xx.max(), 10))
-        ax.view_init(elev=30, azim=45)
-        ax.set_box_aspect((1, 1, 0.25))
-        ax.set_xlim(xx.min(), xx.max() + self.res)
-        ax.set_ylim(yy.min(), yy.max() + self.res)
-        ax.set_zlim(min(data), xx.max() / 10)
-        ax.set_title("2.5D celestial terrain")
-
-        return hmap, ax

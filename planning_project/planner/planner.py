@@ -13,12 +13,10 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import torch
 
-from env.env import Data, GridMap
-from env.slip_models import SlipModel, SlipModelsGenerator
-from planning_project.planner.utils import Metrics
+from planning_project.utils.structs import EvalMetrics
 from planning_project.planner.cost_calculator import CostEstimator, CostObserver
 from planning_project.planner.motion_model import motion_model
-from planning_project.utils.data import DataSet, visualize, create_int_label
+from planning_project.utils.viz import viz_terrain_props, viz_2d_map, viz_3d_map, viz_slip_models
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -58,57 +56,6 @@ class Node:
 
         """
         return f'cost at node: {self.f}'
-
-class PriorityQueue:
-
-    def __init__(self):
-        """
-        __init__: 
-
-        """
-        self.nodes = []
-
-    def insert(self, node):
-        """
-        insert: append node into open/closed list
-
-        :param node: appended node
-        """
-        self.nodes.append(node)
-
-    def update(self, node):
-        """
-        update: update cost value of the already existing node
-        
-        """
-        node_id = self.nodes.index(node)
-        if node.f < self.nodes[node_id].f:
-            self.nodes[node_id] = node
-
-    def pop(self):
-        """
-        pop: find best node and remove it from open/closed list
-
-        """
-        node_best = self.nodes[0]
-        node_id = 0
-        for i, node_ in enumerate(self.nodes):
-            if node_.f < node_best.f:
-                node_best = node_
-                node_id = i
-        self.nodes.pop(node_id)
-        return node_best
-
-    def test(self, node):
-        """
-        test: check the node is already appended open/closed list, or not
-
-        :param node: tested node
-        """
-        if node in self.nodes:
-            return True
-        else:
-            return False
 
 class PriorityHeapQueue:
     
@@ -158,7 +105,7 @@ class PriorityHeapQueue:
 
 class AStarPlanner:
 
-    def __init__(self, map, smg, hyper_params):
+    def __init__(self, map, smg, nn_model_dir):
         """
         __init__:
 
@@ -166,9 +113,8 @@ class AStarPlanner:
         :param smg: slip models generator class
         :param hyper_params: hyper parameter structure
         """
-        self.hyper_params = hyper_params
         self.smg = smg
-        self.nn_model_dir = self.hyper_params.nn_model_dir
+        self.nn_model_dir = nn_model_dir
 
         if map is None:
             # init w/o map information
@@ -205,6 +151,9 @@ class AStarPlanner:
         self.map = map
         if plan_metrics.type_model != "gtm":
             _ = self.predict(self.map.data.color.transpose(2, 0, 1).astype(np.float32))
+        else:
+            self.pred = None
+            self.pred_prob = None
 
         self.cost_estimator = self.set_cost_estimator(plan_metrics) # estimator for path planning
         self.cost_observer = CostObserver(self.smg, self.map)
@@ -214,9 +163,6 @@ class AStarPlanner:
         self.node_failed = None
         self.path = None
         self.nodes = []
-
-        self.pred = None
-        self.pred_prob = None
 
     def predict(self, color_map):
         """
@@ -381,7 +327,7 @@ class AStarPlanner:
 
         """
         if self.path is None:
-            metrics = Metrics(is_solved=False, is_feasible=False)
+            metrics = EvalMetrics(is_solved=False, is_feasible=False)
             return metrics
         # init metrics
         dist = 0
@@ -431,7 +377,7 @@ class AStarPlanner:
             if not is_feasible:
                 break
         # add calculated information into metrics structure
-        metrics = Metrics(path=self.path,
+        metrics = EvalMetrics(path=self.path,
                         dist=dist,
                         obs_time=obs_time,
                         est_cost=est_cost,
@@ -480,12 +426,13 @@ class AStarPlanner:
         sns.set()
         sns.set_style('whitegrid')
         fig = plt.figure(figsize=figsize)
-        fig.suptitle("Terrain classification and path planning results")
+        fig.suptitle("Traversability prediction and path planning results")
         # plot 2.5 and 2d envs
-        _, _ = self.map.plot_3d_map(fig=fig, rc=245, is_tf=is_tf)
-        _, ax = self.map.plot_2d_map(fig=fig, rc=144)
+        _, _ = viz_3d_map(self.map, fig=fig, rc=245, is_tf=is_tf)
+        _, ax = viz_2d_map(self.map, fig=fig, rc=144)
         # plot actual and predicted models
-        self.smg.visualize(fig=fig, rc_ax1=246, rc_ax2=247)
+        viz_slip_models(self.smg, fig=fig, rc_ax1=246, rc_ax2=247)
+        plt.tight_layout()
         return fig, ax
 
     def plot_terrain_classification(self, fig):
@@ -494,10 +441,12 @@ class AStarPlanner:
 
         :param fig: figure
         """
-        visualize(vmin=0, vmax=9, n_row=2, n_col=4, fig=fig, 
-        terrain_texture_map=self.map.data.color, 
-        ground_truth=np.reshape(self.map.data.t_class, (self.map.n, self.map.n)), 
-        prediction=np.reshape(self.pred, (self.map.n, self.map.n)))
+        viz_terrain_props(
+            vmin=0, vmax=9, n_row=2, n_col=4, fig=fig, 
+            terrain_texture_map=self.map.data.color, 
+            ground_truth=np.reshape(self.map.data.t_class, (self.map.n, self.map.n)), 
+            prediction=np.reshape(self.pred, (self.map.n, self.map.n))
+        )
 
     def plot_final_path(self, ax, metrics, color: str = "black", plan_type: str = "optimal planner"):
         """

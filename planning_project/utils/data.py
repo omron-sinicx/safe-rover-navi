@@ -4,39 +4,10 @@ author: Masafumi Endo
 """
 
 import numpy as np
-import matplotlib.pyplot as plt
 import torch.utils.data as data
 import os
 
 BASE_PATH = os.path.dirname(__file__)
-
-# helper function for data visualization
-def visualize(vmin: float, vmax: float, n_row: int = 1, n_col: int = None, fig: plt.figure = None, **images):
-    """
-    visualize: visualize input images in one row
-
-    :param vmin: lower bound of visualized pixel infomation
-    :param vmax: upper bound of visualized pixel information
-    :param n_row: number of rows in fig
-    :param fig: matplotlib object
-    :param **images: sequence of images (input, mask, prediction results etc...)
-    """
-    if not fig:
-        fig = plt.figure()
-        n_row = 1
-    if not n_col:
-        n_col = len(images)
-    for i, (name, image) in enumerate(images.items()):
-        ax = fig.add_subplot(n_row, n_col, i + 1)
-        ax.set_xticks([])
-        ax.set_yticks([])
-        ax.set_title(' '.join(name.split('_')))
-        if name == 'mask' or 'prediction':
-            ax.imshow(image, vmin=vmin, vmax=vmax, cmap="jet")
-        if name == 'likelihood':
-            ax.imshow(image, vmin=0, vmax=1, cmap="jet")
-        else:
-            ax.imshow(image)
 
 def create_int_label(data: np.array):
     """

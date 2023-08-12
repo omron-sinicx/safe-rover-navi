@@ -5,9 +5,6 @@ author: Masafumi Endo
 
 import pickle
 import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib.cm as cm
-import seaborn as sns
 import os
 BASE_PATH = os.path.dirname(__file__)
 
@@ -206,40 +203,3 @@ class SlipModelsGenerator:
         """
         s_mean, s_var = self.slip_models[tf].predict(self.gp_models[tf], np.array([[theta]]))
         return (s_mean[0, 0], s_var[0, 0])
-
-    def visualize(self, fig: plt.figure = None, rc_ax1: int = 121, rc_ax2: int = 122):
-        """
-        visualize: visualize actual and predicted slip models
-
-        :param rc_ax1: position of plot (actual model)
-        :param rc_ax2: position of plot (predicted model)
-        """
-
-        sns.set()
-        if not fig:
-            fig = plt.figure(figsize=(10, 5))
-        ax1 = fig.add_subplot(rc_ax1)
-        ax2 = fig.add_subplot(rc_ax2)
-        color = cm.jet(np.linspace(0, 1, self.n_terrains))
-        for i in range(self.n_terrains):
-            theta = np.linspace(-40, 40, 100)
-            model_actual = np.zeros(theta.shape[0])
-            for j, theta_ in enumerate(theta):
-                model_actual[j] = self.slip_models[i].latent_model(theta=theta_)
-            ax1.plot(theta, model_actual, color=color[i])
-            self.gp_models[i].plot_mean(ax=ax2, color=color[i], label=None)
-            self.gp_models[i].plot_confidence(ax=ax2, color=color[i], label=None)
-        ax1.set_title('actual slip model')
-        ax1.set_xlim([-20, 20])
-        ax1.set_ylim([-1, 1])
-        ax1.set_xticks([-20, -10, 0, 10, 20])
-        ax1.set_yticks([-1, -0.5, 0, 0.5, 1])
-        ax1.set_xlabel('slope angle deg')
-        ax1.set_ylabel('slip ratio')
-        ax2.set_title('GP prediction of slip model')
-        ax2.set_xlim([-20, 20])
-        ax2.set_ylim([-1, 1])
-        ax2.set_xticks([-20, -10, 0, 10, 20])
-        ax2.set_yticks([-1, -0.5, 0, 0.5, 1])
-        ax2.set_xlabel('slope angle deg')
-        ax2.set_ylabel('slip ratio')
