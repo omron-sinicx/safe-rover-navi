@@ -28,7 +28,7 @@ $ source .venv/bin/activate
 ```
 
 ### Place testing datasets in your repository
-- Visit each dataset release ([Standard](https://github.com/omron-sinicx/safe-rover-navi/releases/tag/v0.0), [Erroneous Slip](https://github.com/omron-sinicx/safe-rover-navi/releases/tag/v0.1), and [Ambiguous Appearance](https://github.com/omron-sinicx/safe-rover-navi/releases/tag/v0.2) datasets) to place them in your repository. You will eventually organize datasets in `./datasets` directory as follows.
+- Visit [datasets release](https://github.com/omron-sinicx/safe-rover-navi/releases/tag/v0.0) to place them in your repository. You will eventually organize datasets in `./datasets` directory as follows.
 
 ```
 datasets
