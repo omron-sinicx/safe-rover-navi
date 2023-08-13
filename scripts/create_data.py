@@ -46,7 +46,12 @@ class DataGenerator:
         path2ds = os.path.join(BASE_PATH, '../datasets/dataset_%s/%s/' % (self.n_ds, self.split))
         if not os.path.exists(path2ds):
             os.makedirs(path2ds, exist_ok=True)
-        self.smg = SlipModelsGenerator(os.path.join(BASE_PATH, '../datasets/dataset_%s/' % (self.n_ds)), self.n_terrains)
+        # call smg
+        if n_ds == "Std":
+            type_noise = 'uniform'
+        else:
+            type_noise = 'diverse'
+        self.smg = SlipModelsGenerator(os.path.join(BASE_PATH, '../datasets/dataset_%s/' % (self.n_ds)), self.n_terrains, is_update=True, type_noise=type_noise)
 
         # set conditions for occupancy ratio
         self.n_filled = 4
